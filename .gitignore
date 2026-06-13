@@ -15,6 +15,10 @@ backend/.uv/
 *.db
 *.sqlite3
 
+# Node modules at root and generated configs
+node_modules/
+convex/_generated/
+
 # Log files and local configs
 *.log
 .DS_Store

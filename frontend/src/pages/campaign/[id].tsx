@@ -8,43 +8,117 @@ import ContentMatrix from '../../components/ContentMatrix';
 import MetricsPanel from '../../components/MetricsPanel';
 import { INITIAL_CAMPAIGNS, MOCK_CONTENT, MOCK_AGENT_LOGS } from '../../lib/mockData';
 import { Campaign, ContentItem } from '../../lib/types';
+import { getCampaigns, getCampaign, getCampaignContent, getCampaignMetrics, getCampaignAgentRuns, triggerCampaignRun } from '../../lib/api';
 import { Play, RotateCcw, AlertTriangle, ArrowLeft, CheckCircle, HelpCircle } from 'lucide-react';
 
 export default function CampaignCockpit() {
   const router = useRouter();
   const { id } = router.query;
 
-  const [campaigns, setCampaigns] = useState<Campaign[]>(INITIAL_CAMPAIGNS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [currentCampaign, setCurrentCampaign] = useState<Campaign | null>(null);
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [runningLogs, setRunningLogs] = useState<string[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [backendError, setBackendError] = useState(false);
 
-  // Load campaigns & content from localStorage or fallback to defaults
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const storedCamp = localStorage.getItem('gmachie_campaigns');
-      const storedContent = localStorage.getItem('gmachie_content');
-      
-      const loadedCamp = storedCamp ? JSON.parse(storedCamp) : INITIAL_CAMPAIGNS;
-      setCampaigns(loadedCamp);
-
-      if (id) {
-        const found = loadedCamp.find((c: Campaign) => c.id === id);
-        if (found) {
-          setCurrentCampaign(found);
-          // Only load mock content if the campaign has run before (cycle > 0)
-          if (found.currentCycle > 0) {
-            const defaultContent = MOCK_CONTENT.filter(c => c.campaignId === id);
-            const loadedContent = storedContent ? JSON.parse(storedContent) : defaultContent;
-            setContentItems(loadedContent);
-          } else {
-            setContentItems([]);
-          }
-        }
+  // Load campaign list for Sidebar
+  const loadSidebarCampaigns = async () => {
+    try {
+      const rawCamp = await getCampaigns();
+      const normalized = rawCamp.map((c: any) => ({
+        ...c,
+        id: c._id || c.id,
+        currentCycle: c.currentCycle ?? 0,
+        currentPhase: c.currentPhase ?? 'idle',
+        status: c.status ?? 'draft'
+      }));
+      setCampaigns(normalized);
+      setBackendError(false);
+    } catch (err) {
+      setBackendError(true);
+      const stored = localStorage.getItem('gmachie_campaigns');
+      if (stored) {
+        setCampaigns(JSON.parse(stored));
+      } else {
+        setCampaigns(INITIAL_CAMPAIGNS);
       }
     }
+  };
+
+  // Poll current campaign details (logs, content, metrics, status)
+  const pollCampaignDetails = async () => {
+    if (!id || typeof id !== 'string') return;
+    try {
+      // 1. Fetch Campaign
+      const rawCamp = await getCampaign(id);
+      const normalized: Campaign = {
+        ...rawCamp,
+        id: (rawCamp as any)._id || rawCamp.id,
+        currentCycle: rawCamp.currentCycle ?? 0,
+        currentPhase: rawCamp.currentPhase ?? 'idle',
+        status: rawCamp.status ?? 'draft'
+      } as any;
+      setCurrentCampaign(normalized);
+      setBackendError(false);
+
+      if (normalized.status === 'running') {
+        setIsSimulating(true);
+      } else {
+        setIsSimulating(false);
+      }
+
+      // 2. Fetch Content
+      const rawContent = await getCampaignContent(id);
+      const normalizedContent = rawContent.map((c: any) => ({
+        ...c,
+        id: c._id || c.id
+      }));
+      setContentItems(normalizedContent);
+
+      // 3. Fetch Runs & Format logs
+      const rawRuns = await getCampaignAgentRuns(id);
+      const logsList: string[] = [];
+      rawRuns.forEach((run: any) => {
+        const agentUpper = run.agentName.toUpperCase();
+        logsList.push(`[INFO] Initializing ${agentUpper} Agent...`);
+        logsList.push(`[INFO] Running ${agentUpper} Agent: Status is ${run.status.toUpperCase()}...`);
+        if (run.status === 'success') {
+          logsList.push(`[SUCCESS] ${agentUpper} Agent completed successfully.`);
+          if (run.output) {
+            logsList.push(`[INFO] Output: ${JSON.stringify(run.output).substring(0, 150)}...`);
+          }
+        } else if (run.status === 'failed') {
+          logsList.push(`[ERROR] ${agentUpper} Agent failed: ${run.errors?.join(', ') || 'unknown error'}`);
+        }
+      });
+      setRunningLogs(logsList);
+    } catch (err) {
+      console.warn("Backend offline or error during details poll, using mock state:", err);
+      setBackendError(true);
+    }
+  };
+
+  useEffect(() => {
+    loadSidebarCampaigns();
   }, [id]);
+
+  useEffect(() => {
+    if (!id) return;
+    
+    // Initial fetch
+    pollCampaignDetails();
+
+    // Set polling interval
+    const interval = setInterval(() => {
+      // Only poll from API if backend is online or we are not in hard simulated mode
+      if (!backendError || isSimulating) {
+        pollCampaignDetails();
+      }
+    }, 2000);
+
+    return () => clearInterval(interval);
+  }, [id, backendError, isSimulating]);
 
   const handleSelectCampaign = (campId: string) => {
     router.push(`/campaign/${campId}`);
@@ -66,10 +140,24 @@ export default function CampaignCockpit() {
   // Helper to wait
   const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
-  // Run the multi-agent GTM simulation loop
+  // Run the GTM simulation/orchestration loop
   const handleLaunchSimulation = async () => {
     if (!currentCampaign || isSimulating) return;
 
+    if (!backendError) {
+      try {
+        setIsSimulating(true);
+        setRunningLogs(["[INFO] Triggering multi-agent orchestrator loop via API..."]);
+        await triggerCampaignRun(currentCampaign.id);
+        // Let the polling interval update the UI
+      } catch (err) {
+        console.error("Failed to trigger campaign run on backend:", err);
+        setIsSimulating(false);
+      }
+      return;
+    }
+
+    // --- FALLBACK MOCK SIMULATION ENGINE ---
     setIsSimulating(true);
     setRunningLogs([]);
     setContentItems([]);
@@ -86,7 +174,6 @@ export default function CampaignCockpit() {
       await delay(600);
     }
     
-    // Set mock GTM plan strategy in state
     camp.gtmPlan = {
       positioning: `Claiming top value proposition for ${camp.name}: Automating and accelerating operations by 10x.`,
       target_audience: camp.icp || "General B2B SaaS SME Audience",
@@ -113,7 +200,6 @@ export default function CampaignCockpit() {
       await delay(700);
     }
     
-    // Set mock Research Insights
     camp.researchInsights = {
       personas: [
         {
@@ -143,7 +229,6 @@ export default function CampaignCockpit() {
       await delay(600);
     }
     
-    // Generate the content items
     const generatedContent: ContentItem[] = [
       {
         id: `content-x-${camp.id}`,
@@ -185,7 +270,6 @@ export default function CampaignCockpit() {
       await delay(700);
     }
     
-    // Mark content items as published
     const publishedContent = generatedContent.map((item) => ({
       ...item,
       status: (item.channel === 'email' ? 'scheduled' : 'published') as any,
@@ -219,7 +303,7 @@ export default function CampaignCockpit() {
     updateCampaignState(camp);
     await delay(2500);
 
-    // --- FINALIZE CYCLE ---
+    // --- FINALIZE MOCK RUN ---
     camp.status = 'completed';
     camp.currentPhase = 'idle';
     camp.currentCycle += 1;

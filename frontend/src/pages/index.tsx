@@ -1,15 +1,18 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import Head from 'next/head';
 import { useRouter } from 'next/router';
 import Sidebar from '../components/Sidebar';
 import { INITIAL_CAMPAIGNS } from '../lib/mockData';
 import { Campaign } from '../lib/types';
+import { getCampaigns, startCampaign } from '../lib/api';
 import { Zap, HelpCircle, Briefcase, Plus, Send, Target, Rocket, Sparkles, Building, Globe } from 'lucide-react';
 
 export default function Home() {
   const router = useRouter();
-  const [campaigns, setCampaigns] = useState<Campaign[]>(INITIAL_CAMPAIGNS);
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [backendError, setBackendError] = useState(false);
   
   // Form fields
   const [name, setName] = useState('');
@@ -24,61 +27,95 @@ export default function Home() {
     router.push(`/campaign/${id}`);
   };
 
-  const handleCreateCampaign = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name || !businessName || !description || !goal) return;
-
-    const newCampaignId = `camp-${Math.random().toString(36).substring(2, 9)}`;
-    const newCampaign: Campaign = {
-      id: newCampaignId,
-      name,
-      businessInfo: {
-        name: businessName,
-        description,
-        website,
-        industry
-      },
-      icp,
-      goal,
-      status: 'draft',
-      currentCycle: 0,
-      currentPhase: 'idle',
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-
-    // Update global state/local mock state
-    const updated = [newCampaign, ...campaigns];
-    setCampaigns(updated);
-    
-    // Save to localStorage for simple cross-page persistence in demo
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('gmachie_campaigns', JSON.stringify(updated));
-    }
-
-    // Reset Form
-    setName('');
-    setBusinessName('');
-    setDescription('');
-    setWebsite('');
-    setIcp('');
-    setGoal('');
-    setIndustry('');
-    setShowCreateModal(false);
-
-    // Navigate to the new campaign cockpit
-    router.push(`/campaign/${newCampaignId}`);
-  };
-
-  // Fetch campaigns from localStorage if present
-  React.useEffect(() => {
-    if (typeof window !== 'undefined') {
+  const loadCampaignsData = async () => {
+    try {
+      const rawCamp = await getCampaigns();
+      const normalized = rawCamp.map((c: any) => ({
+        ...c,
+        id: c._id || c.id,
+        currentCycle: c.currentCycle ?? 0,
+        currentPhase: c.currentPhase ?? 'idle',
+        status: c.status ?? 'draft'
+      }));
+      setCampaigns(normalized);
+      setBackendError(false);
+    } catch (err) {
+      console.warn("Backend offline, falling back to local mock data:", err);
+      setBackendError(true);
+      // Fallback to local storage or mock data
       const stored = localStorage.getItem('gmachie_campaigns');
       if (stored) {
         setCampaigns(JSON.parse(stored));
+      } else {
+        setCampaigns(INITIAL_CAMPAIGNS);
       }
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
+    loadCampaignsData();
+    // Poll for updates every 5 seconds
+    const interval = setInterval(loadCampaignsData, 5000);
+    return () => clearInterval(interval);
   }, []);
+
+  const handleCreateCampaign = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name || !businessName || !description || !goal) return;
+
+    try {
+      const payload = {
+        business_info: {
+          name: businessName,
+          description,
+          website,
+          industry
+        },
+        goal,
+        icp
+      };
+
+      if (!backendError) {
+        // Production call to FastAPI backend
+        const res = await startCampaign(payload);
+        router.push(`/campaign/${res.campaign_id}`);
+      } else {
+        // Fallback mock campaign creation
+        const newCampaignId = `camp-${Math.random().toString(36).substring(2, 9)}`;
+        const newCampaign: Campaign = {
+          id: newCampaignId,
+          name,
+          businessInfo: payload.business_info,
+          icp,
+          goal,
+          status: 'draft',
+          currentCycle: 0,
+          currentPhase: 'idle',
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString()
+        };
+
+        const updated = [newCampaign, ...campaigns];
+        setCampaigns(updated);
+        localStorage.setItem('gmachie_campaigns', JSON.stringify(updated));
+        router.push(`/campaign/${newCampaignId}`);
+      }
+
+      // Reset Form
+      setName('');
+      setBusinessName('');
+      setDescription('');
+      setWebsite('');
+      setIcp('');
+      setGoal('');
+      setIndustry('');
+      setShowCreateModal(false);
+    } catch (err) {
+      console.error("Failed to create campaign:", err);
+    }
+  };
 
   return (
     <>

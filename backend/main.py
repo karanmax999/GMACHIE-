@@ -107,6 +107,32 @@ async def start_campaign(request: StartCampaignRequest, background_tasks: Backgr
     return {"campaign_id": campaign_id, "status": "started"}
 
 
+@app.post("/api/campaigns/{campaign_id}/run")
+async def run_campaign_cycle(campaign_id: str, background_tasks: BackgroundTasks):
+    """Trigger a new GTM cycle for an existing campaign."""
+    try:
+        campaign = await convex_client.get_campaign(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+        
+        # Mark status as running in Convex
+        await convex_client.update_campaign(campaign_id, {"status": "running"})
+        
+        # Trigger background execution
+        background_tasks.add_task(
+            orchestrator.run_campaign,
+            campaign["businessInfo"],
+            campaign["goal"],
+            campaign_id=campaign_id
+        )
+        return {"status": "started"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error triggering campaign run {campaign_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to start campaign cycle: {str(e)}")
+
+
 @app.get("/api/campaigns")
 async def list_campaigns():
     """List all campaigns."""
@@ -159,4 +185,3 @@ async def get_campaign_agent_runs(campaign_id: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host=os.getenv("HOST", "0.0.0.0"), port=int(os.getenv("PORT", 8082)))
-```

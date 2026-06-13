@@ -1,5 +1,5 @@
 import { query } from "../_generated/server";
-import { v } from "convex/validation";
+import { v } from "convex/values";
 
 export default query({
   args: {

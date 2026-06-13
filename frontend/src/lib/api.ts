@@ -62,3 +62,11 @@ export async function getCampaignAgentRuns(id: string): Promise<any[]> {
   if (!res.ok) throw new Error('Failed to fetch agent runs');
   return res.json();
 }
+
+export async function triggerCampaignRun(id: string): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/api/campaigns/${id}/run`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to trigger campaign run');
+  return res.json();
+}

@@ -2,9 +2,9 @@
 
 from typing import Dict, Any, Optional
 from datetime import datetime
-from .agent import BaseAgent, AgentInput, AgentResult, AgentContext, registry
-from .state_store import StateStore, CampaignState
-from ..integrations.convex_client import ConvexClient, get_convex_client
+from core.agent import BaseAgent, AgentInput, AgentResult, AgentContext, registry
+from core.state_store import StateStore, CampaignState
+from integrations.convex_client import ConvexClient, get_convex_client
 from loguru import logger
 
 

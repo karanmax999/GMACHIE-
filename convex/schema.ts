@@ -1,5 +1,5 @@
 import { defineSchema, defineTable } from "convex/server";
-import { v } from "convex/validation";
+import { v } from "convex/values";
 
 export default defineSchema({
   campaigns: defineTable({
@@ -24,8 +24,8 @@ export default defineSchema({
     totalClicks: v.optional(v.number()),
     totalSignups: v.optional(v.number()),
     ctr: v.optional(v.number()),
-    createdAt: v.optional(v.date()),
-    updatedAt: v.optional(v.date()),
+    createdAt: v.optional(v.any()),
+    updatedAt: v.optional(v.any()),
   }).index("by_status", ["status"]),
 
   content: defineTable({
@@ -36,8 +36,8 @@ export default defineSchema({
     body: v.string(),
     variant: v.optional(v.string()),
     status: v.string(), // "generated", "scheduled", "published", "failed"
-    publishedAt: v.optional(v.date()),
-    scheduledAt: v.optional(v.date()),
+    publishedAt: v.optional(v.any()),
+    scheduledAt: v.optional(v.any()),
     metrics: v.optional(v.object({
       impressions: v.optional(v.number()),
       clicks: v.optional(v.number()),
@@ -45,7 +45,7 @@ export default defineSchema({
       replies: v.optional(v.number()),
       signups: v.optional(v.number()),
     })),
-    createdAt: v.optional(v.date()),
+    createdAt: v.optional(v.any()),
   }).index("by_campaign", ["campaignId"]),
 
   metrics: defineTable({
@@ -54,7 +54,7 @@ export default defineSchema({
     channel: v.string(),
     metricType: v.string(), // "impressions", "clicks", "signups", "ctr"
     value: v.number(),
-    recordedAt: v.date(),
+    recordedAt: v.any(),
   }).index("by_campaign", ["campaignId"]).index("by_channel", ["channel"]),
 
   agentRuns: defineTable({
@@ -64,8 +64,8 @@ export default defineSchema({
     input: v.any(),
     output: v.any(),
     status: v.string(), // "running", "success", "failed"
-    startedAt: v.date(),
-    completedAt: v.optional(v.date()),
+    startedAt: v.any(),
+    completedAt: v.optional(v.any()),
     errors: v.optional(v.array(v.string())),
   }).index("by_campaign", ["campaignId"]).index("by_agent", ["agentName"]),
 });

@@ -1,6 +1,6 @@
 """Channel Email Agent - Manages email campaign sending and tracking with real API stub."""
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import random
 from datetime import datetime
 from core.agent import BaseAgent, AgentInput, AgentResult, AgentContext, agent

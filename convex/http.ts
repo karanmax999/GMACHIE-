@@ -105,7 +105,7 @@ http.route({
   handler: httpAction(async (ctx, request) => {
     const url = new URL(request.url);
     const campaignId = url.searchParams.get("campaignId");
-    if (!campaignId) return jsonResponse({ error: "Missing campaignId" }, 450);
+    if (!campaignId) return jsonResponse({ error: "Missing campaignId" }, 400);
     const result = await ctx.runQuery(api.queries.getCampaignContent.default, { campaignId: campaignId as any });
     return jsonResponse(result);
   }),

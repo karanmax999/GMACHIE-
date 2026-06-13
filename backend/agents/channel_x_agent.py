@@ -1,6 +1,6 @@
 """Channel X/Twitter Agent - Handles posting and engagement on X with real API fallback."""
 
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 import random
 from datetime import datetime
 from core.agent import BaseAgent, AgentInput, AgentResult, AgentContext, agent

@@ -6,11 +6,11 @@ export default mutation({
     campaignId: v.id("campaigns"),
     updates: v.any(),
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const { campaignId, updates } = args;
-    ctx.db.patch(campaignId, {
+    await ctx.db.patch(campaignId, {
       ...updates,
-      updatedAt: new Date(),
+      updatedAt: new Date().toISOString(),
     });
     return { success: true };
   },

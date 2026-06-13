@@ -67,6 +67,16 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/api/mutations/updateContent",
+  method: "POST",
+  handler: httpAction(async (ctx, request) => {
+    const { args } = await request.json();
+    const result = await ctx.runMutation(api.mutations.updateContent.default, args);
+    return jsonResponse(result);
+  }),
+});
+
 // Route queries
 http.route({
   path: "/api/queries/getCampaign",

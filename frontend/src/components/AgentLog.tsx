@@ -6,11 +6,16 @@ interface AgentLogProps {
 }
 
 export default function AgentLog({ logs }: AgentLogProps) {
-  const terminalEndRef = useRef<HTMLDivElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [copied, setCopied] = React.useState(false);
 
   useEffect(() => {
-    terminalEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    if (scrollContainerRef.current) {
+      scrollContainerRef.current.scrollTo({
+        top: scrollContainerRef.current.scrollHeight,
+        behavior: 'smooth'
+      });
+    }
   }, [logs]);
 
   const copyLogs = () => {
@@ -120,7 +125,7 @@ export default function AgentLog({ logs }: AgentLogProps) {
       </div>
 
       {/* Console Log Area */}
-      <div className="flex-1 overflow-y-auto p-5 space-y-3 font-mono text-[12px] leading-relaxed bg-[#05070B]/90">
+      <div ref={scrollContainerRef} className="flex-1 overflow-y-auto p-5 space-y-3 font-mono text-[12px] leading-relaxed bg-[#05070B]/90">
         {logs.length === 0 ? (
           <div className="h-full flex flex-col items-center justify-center text-slate-600 gap-2">
             <Terminal className="w-8 h-8 opacity-20" />
@@ -145,7 +150,6 @@ export default function AgentLog({ logs }: AgentLogProps) {
             );
           })
         )}
-        <div ref={terminalEndRef} />
       </div>
     </div>
   );

@@ -1,6 +1,9 @@
 """GMACHIE Backend - FastAPI application."""
 
 import os
+from dotenv import load_dotenv
+load_dotenv()  # Load environment variables from .env file
+
 from fastapi import FastAPI, BackgroundTasks, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -45,19 +48,36 @@ agent_config: Dict[str, Any] = {"real_mode": os.getenv("REAL_MODE", "false").low
 
 if agent_config["real_mode"]:
     # X/Twitter
-    twitter_token = os.getenv("TWITTER_ACCESS_TOKEN")
-    if twitter_token:
-        agent_config["x_client"] = XClient(twitter_token)
-        logger.info("X client initialized in real mode")
+    twitter_api_key = os.getenv("TWITTER_API_KEY")
+    twitter_api_secret = os.getenv("TWITTER_API_SECRET")
+    twitter_access_token = os.getenv("TWITTER_ACCESS_TOKEN")
+    twitter_access_token_secret = os.getenv("TWITTER_ACCESS_TOKEN_SECRET")
+    
+    if twitter_api_key and twitter_api_secret and twitter_access_token and twitter_access_token_secret:
+        agent_config["x_client"] = XClient(
+            consumer_key=twitter_api_key,
+            consumer_secret=twitter_api_secret,
+            access_token=twitter_access_token,
+            access_token_secret=twitter_access_token_secret,
+        )
+        logger.info("X client initialized in real mode using tweepy")
     else:
-        logger.warning("TWITTER_ACCESS_TOKEN not set; X agent will simulate")
+        logger.warning("Twitter/X credentials missing or incomplete; X agent will simulate")
 
     # LinkedIn
     linkedin_token = os.getenv("LINKEDIN_ACCESS_TOKEN")
     linkedin_urn = os.getenv("LINKEDIN_AUTHOR_URN")
+    linkedin_client_id = os.getenv("LINKEDIN_CLIENT_ID")
+    linkedin_client_secret = os.getenv("LINKEDIN_CLIENT_SECRET")
+    
     if linkedin_token and linkedin_urn:
         agent_config["linkedin_client"] = LinkedInClient(linkedin_token, linkedin_urn)
         logger.info("LinkedIn client initialized in real mode")
+    elif linkedin_client_id and linkedin_client_secret:
+        logger.warning(
+            "LinkedIn Client ID & Secret are set, but LINKEDIN_ACCESS_TOKEN and LINKEDIN_AUTHOR_URN are missing. "
+            "Please run 'python ../scripts/get_linkedin_token.py' to generate your access token and URN."
+        )
     else:
         logger.warning("LinkedIn credentials missing; LinkedIn agent will simulate")
 
@@ -101,7 +121,8 @@ async def start_campaign(request: StartCampaignRequest, background_tasks: Backgr
         orchestrator.run_campaign,
         business_info_with_icp,
         goal,
-        campaign_id=campaign_id
+        campaign_id=campaign_id,
+        stage="draft"
     )
 
     return {"campaign_id": campaign_id, "status": "started"}
@@ -123,7 +144,8 @@ async def run_campaign_cycle(campaign_id: str, background_tasks: BackgroundTasks
             orchestrator.run_campaign,
             campaign["businessInfo"],
             campaign["goal"],
-            campaign_id=campaign_id
+            campaign_id=campaign_id,
+            stage="draft"
         )
         return {"status": "started"}
     except HTTPException:
@@ -181,6 +203,45 @@ async def get_campaign_agent_runs(campaign_id: str):
     except Exception as e:
         logger.error(f"Error fetching agent runs: {e}")
         raise HTTPException(status_code=500, detail="Error fetching agent runs")
+
+
+class UpdateContentRequest(BaseModel):
+    body: str
+
+
+@app.put("/api/content/{content_id}")
+async def update_content(content_id: str, request: UpdateContentRequest):
+    """Update a content draft in Convex."""
+    try:
+        await convex_client.update_content(content_id, {"body": request.body})
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to update content {content_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to update content: {str(e)}")
+
+
+@app.post("/api/campaigns/{campaign_id}/approve")
+async def approve_campaign(campaign_id: str, background_tasks: BackgroundTasks):
+    """Approve drafts and launch distribution phase."""
+    try:
+        campaign = await convex_client.get_campaign(campaign_id)
+        if not campaign:
+            raise HTTPException(status_code=404, detail="Campaign not found")
+
+        # Trigger background distribution execution
+        background_tasks.add_task(
+            orchestrator.run_campaign,
+            campaign["businessInfo"],
+            campaign["goal"],
+            campaign_id=campaign_id,
+            stage="publish"
+        )
+        return {"status": "approved"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error approving campaign {campaign_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to approve campaign: {str(e)}")
 
 
 if __name__ == "__main__":

@@ -13,7 +13,7 @@ export default mutation({
     completedAt: v.optional(v.string()),
     errors: v.optional(v.array(v.string())),
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const {
       campaignId,
       agentName,
@@ -25,7 +25,7 @@ export default mutation({
       completedAt,
       errors,
     } = args;
-    ctx.db.insert("agentRuns", {
+    await ctx.db.insert("agentRuns", {
       campaignId,
       agentName,
       phase,

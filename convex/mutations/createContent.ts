@@ -14,7 +14,7 @@ export default mutation({
     scheduledAt: v.optional(v.string()),
     metrics: v.optional(v.any()),
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const {
       campaignId,
       channel,
@@ -27,7 +27,7 @@ export default mutation({
       scheduledAt,
       metrics,
     } = args;
-    const id = ctx.db.insert("content", {
+    const id = await ctx.db.insert("content", {
       campaignId,
       channel,
       type,
@@ -38,7 +38,7 @@ export default mutation({
       publishedAt,
       scheduledAt,
       metrics,
-      createdAt: new Date(),
+      createdAt: new Date().toISOString(),
     });
     return { contentId: id };
   },

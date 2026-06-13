@@ -6,17 +6,18 @@ export default mutation({
     businessInfo: v.any(),
     goal: v.string(),
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const { businessInfo, goal } = args;
-    const id = ctx.db.insert("campaigns", {
+    const { icp, ...cleanBusinessInfo } = businessInfo;
+    const id = await ctx.db.insert("campaigns", {
       name: businessInfo.name || "Unnamed Campaign",
-      businessInfo,
-      icp: businessInfo.icp || "",
+      businessInfo: cleanBusinessInfo,
+      icp: icp || "",
       goal,
       status: "running",
       currentCycle: 0,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
     });
     return { campaignId: id };
   },

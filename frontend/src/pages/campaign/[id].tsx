@@ -8,7 +8,7 @@ import ContentMatrix from '../../components/ContentMatrix';
 import MetricsPanel from '../../components/MetricsPanel';
 import { INITIAL_CAMPAIGNS, MOCK_CONTENT, MOCK_AGENT_LOGS } from '../../lib/mockData';
 import { Campaign, ContentItem } from '../../lib/types';
-import { getCampaigns, getCampaign, getCampaignContent, getCampaignMetrics, getCampaignAgentRuns, triggerCampaignRun } from '../../lib/api';
+import { getCampaigns, getCampaign, getCampaignContent, getCampaignMetrics, getCampaignAgentRuns, triggerCampaignRun, updateContentItem, approveCampaign } from '../../lib/api';
 import { Play, RotateCcw, AlertTriangle, ArrowLeft, CheckCircle, HelpCircle } from 'lucide-react';
 
 export default function CampaignCockpit() {
@@ -20,6 +20,7 @@ export default function CampaignCockpit() {
   const [contentItems, setContentItems] = useState<ContentItem[]>([]);
   const [runningLogs, setRunningLogs] = useState<string[]>([]);
   const [isSimulating, setIsSimulating] = useState(false);
+  const [isMockSimulating, setIsMockSimulating] = useState(false);
   const [backendError, setBackendError] = useState(false);
 
   // Load campaign list for Sidebar
@@ -81,15 +82,21 @@ export default function CampaignCockpit() {
       const logsList: string[] = [];
       rawRuns.forEach((run: any) => {
         const agentUpper = run.agentName.toUpperCase();
-        logsList.push(`[INFO] Initializing ${agentUpper} Agent...`);
-        logsList.push(`[INFO] Running ${agentUpper} Agent: Status is ${run.status.toUpperCase()}...`);
-        if (run.status === 'success') {
-          logsList.push(`[SUCCESS] ${agentUpper} Agent completed successfully.`);
-          if (run.output) {
-            logsList.push(`[INFO] Output: ${JSON.stringify(run.output).substring(0, 150)}...`);
+        if (run.output && typeof run.output === 'object' && Array.isArray(run.output.logs)) {
+          run.output.logs.forEach((logLine: string) => {
+            logsList.push(logLine);
+          });
+        } else {
+          logsList.push(`[INFO] Initializing ${agentUpper} Agent...`);
+          logsList.push(`[INFO] Running ${agentUpper} Agent: Status is ${run.status.toUpperCase()}...`);
+          if (run.status === 'success') {
+            logsList.push(`[SUCCESS] ${agentUpper} Agent completed successfully.`);
+            if (run.output) {
+              logsList.push(`[INFO] Output: ${JSON.stringify(run.output).substring(0, 150)}...`);
+            }
+          } else if (run.status === 'failed') {
+            logsList.push(`[ERROR] ${agentUpper} Agent failed: ${run.errors?.join(', ') || 'unknown error'}`);
           }
-        } else if (run.status === 'failed') {
-          logsList.push(`[ERROR] ${agentUpper} Agent failed: ${run.errors?.join(', ') || 'unknown error'}`);
         }
       });
       setRunningLogs(logsList);
@@ -111,14 +118,14 @@ export default function CampaignCockpit() {
 
     // Set polling interval
     const interval = setInterval(() => {
-      // Only poll from API if backend is online or we are not in hard simulated mode
-      if (!backendError || isSimulating) {
+      // Only poll from API if we are not actively running a local client-side mock simulation
+      if (!isMockSimulating) {
         pollCampaignDetails();
       }
     }, 2000);
 
     return () => clearInterval(interval);
-  }, [id, backendError, isSimulating]);
+  }, [id, isMockSimulating]);
 
   const handleSelectCampaign = (campId: string) => {
     router.push(`/campaign/${campId}`);
@@ -147,9 +154,8 @@ export default function CampaignCockpit() {
     if (!backendError) {
       try {
         setIsSimulating(true);
-        setRunningLogs(["[INFO] Triggering multi-agent orchestrator loop via API..."]);
+        setRunningLogs(["[INFO] Triggering GTM Draft Phase via API..."]);
         await triggerCampaignRun(currentCampaign.id);
-        // Let the polling interval update the UI
       } catch (err) {
         console.error("Failed to trigger campaign run on backend:", err);
         setIsSimulating(false);
@@ -157,8 +163,9 @@ export default function CampaignCockpit() {
       return;
     }
 
-    // --- FALLBACK MOCK SIMULATION ENGINE ---
+    // --- FALLBACK MOCK SIMULATION ENGINE (Draft Phase) ---
     setIsSimulating(true);
+    setIsMockSimulating(true);
     setRunningLogs([]);
     setContentItems([]);
 
@@ -260,7 +267,40 @@ export default function CampaignCockpit() {
       }
     ];
     setContentItems(generatedContent);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('gmachie_content', JSON.stringify(generatedContent));
+    }
     await delay(500);
+
+    // Halt campaign cycle for human review
+    camp.status = 'needs_review';
+    camp.currentPhase = 'review';
+    updateCampaignState(camp);
+    setIsSimulating(false);
+    setIsMockSimulating(false);
+  };
+
+  const handleApproveCampaign = async () => {
+    if (!currentCampaign || isSimulating) return;
+
+    if (!backendError) {
+      try {
+        setIsSimulating(true);
+        setRunningLogs((prev) => [...prev, "[INFO] Approving drafts and triggering live distribution phase..."]);
+        await approveCampaign(currentCampaign.id);
+      } catch (err) {
+        console.error("Failed to approve campaign:", err);
+        setIsSimulating(false);
+      }
+      return;
+    }
+
+    // --- FALLBACK MOCK SIMULATION ENGINE (Distribution Phase) ---
+    setIsSimulating(true);
+    setIsMockSimulating(true);
+    const camp = { ...currentCampaign };
+    camp.status = 'running';
+    updateCampaignState(camp);
 
     // --- PHASE 4: EXECUTING ---
     camp.currentPhase = 'executing';
@@ -270,7 +310,7 @@ export default function CampaignCockpit() {
       await delay(700);
     }
     
-    const publishedContent = generatedContent.map((item) => ({
+    const publishedContent = contentItems.map((item) => ({
       ...item,
       status: (item.channel === 'email' ? 'scheduled' : 'published') as any,
       publishedAt: item.channel !== 'email' ? new Date().toISOString() : undefined,
@@ -311,13 +351,22 @@ export default function CampaignCockpit() {
     updateCampaignState(camp);
 
     setIsSimulating(false);
+    setIsMockSimulating(false);
   };
 
-  const handleUpdateContentBody = (contentId: string, newBody: string) => {
+  const handleUpdateContentBody = async (contentId: string, newBody: string) => {
     const updated = contentItems.map((item) => (item.id === contentId ? { ...item, body: newBody } : item));
     setContentItems(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('gmachie_content', JSON.stringify(updated));
+    if (!backendError) {
+      try {
+        await updateContentItem(contentId, newBody);
+      } catch (err) {
+        console.error("Failed to update content body on backend:", err);
+      }
+    } else {
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('gmachie_content', JSON.stringify(updated));
+      }
     }
   };
 
@@ -397,27 +446,70 @@ export default function CampaignCockpit() {
               </div>
 
               {/* Trigger orchestration button */}
-              <button
-                onClick={handleLaunchSimulation}
-                disabled={isSimulating}
-                className="flex items-center gap-2 py-3 px-5 rounded-xl bg-gradient-to-r from-accent-cyan via-accent-indigo to-accent-violet hover:brightness-110 disabled:opacity-50 text-white font-bold text-sm shadow-xl shadow-accent-indigo/15 hover:scale-[1.02] active:scale-[0.98] transition-all self-stretch sm:self-auto justify-center"
-              >
-                {isSimulating ? (
-                  <>
-                    <span className="w-2 h-2 rounded-full bg-white animate-ping" />
-                    <span>Running Agents...</span>
-                  </>
-                ) : (
-                  <>
-                    <Play className="w-4 h-4 text-white fill-white" />
-                    <span>Launch Orchestration Cycle</span>
-                  </>
-                )}
-              </button>
+              {currentCampaign.status === 'needs_review' ? (
+                <button
+                  onClick={handleApproveCampaign}
+                  disabled={isSimulating}
+                  className="flex items-center gap-2 py-3 px-5 rounded-xl bg-amber-500 hover:bg-amber-400 disabled:opacity-50 text-black font-extrabold text-sm shadow-xl shadow-amber-500/15 hover:scale-[1.02] active:scale-[0.98] transition-all self-stretch sm:self-auto justify-center animate-pulse-glow"
+                >
+                  {isSimulating ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-black animate-ping" />
+                      <span>Publishing...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle className="w-4 h-4 text-black fill-none" />
+                      <span>Approve & Publish</span>
+                    </>
+                  )}
+                </button>
+              ) : (
+                <button
+                  onClick={handleLaunchSimulation}
+                  disabled={isSimulating}
+                  className="flex items-center gap-2 py-3 px-5 rounded-xl bg-gradient-to-r from-accent-cyan via-accent-indigo to-accent-violet hover:brightness-110 disabled:opacity-50 text-white font-bold text-sm shadow-xl shadow-accent-indigo/15 hover:scale-[1.02] active:scale-[0.98] transition-all self-stretch sm:self-auto justify-center"
+                >
+                  {isSimulating ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+                      <span>Running Agents...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Play className="w-4 h-4 text-white fill-white" />
+                      <span>Launch Orchestration Cycle</span>
+                    </>
+                  )}
+                </button>
+              )}
             </div>
 
             {/* Stage Pipeline Banner */}
-            <AgentPipeline currentPhase={currentCampaign.currentPhase} />
+            <AgentPipeline currentPhase={currentCampaign.status === 'completed' ? 'completed' : currentCampaign.currentPhase as any} />
+
+            {/* HITL Review Banner */}
+            {currentCampaign.status === 'needs_review' && (
+              <div className="bg-amber-950/20 border border-amber-500/25 rounded-2xl p-5 flex flex-col md:flex-row items-start md:items-center justify-between gap-4 shadow-[0_0_20px_rgba(245,158,11,0.05)] animate-pulse-glow">
+                <div className="flex items-center gap-3.5">
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-400">
+                    <AlertTriangle className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-amber-200 tracking-tight">Campaign Draft Ready for Review</h4>
+                    <p className="text-xs text-amber-400/80 mt-0.5">Please review the GTM Strategy, Target Personas, and editable drafts in the Content Matrix below before publishing.</p>
+                  </div>
+                </div>
+                <button
+                  onClick={handleApproveCampaign}
+                  disabled={isSimulating}
+                  className="flex items-center gap-2 py-2.5 px-4 rounded-xl bg-amber-500 hover:bg-amber-400 text-black font-extrabold text-xs shadow-lg shadow-amber-500/15 hover:scale-[1.02] active:scale-[0.98] transition-all self-stretch md:self-auto justify-center"
+                >
+                  <CheckCircle className="w-4 h-4 text-black fill-none" />
+                  <span>Approve & Publish Campaign</span>
+                </button>
+              </div>
+            )}
 
             {/* Split Screen Dashboard Area */}
             <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">

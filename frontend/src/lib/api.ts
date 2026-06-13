@@ -70,3 +70,21 @@ export async function triggerCampaignRun(id: string): Promise<{ status: string }
   if (!res.ok) throw new Error('Failed to trigger campaign run');
   return res.json();
 }
+
+export async function updateContentItem(contentId: string, body: string): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/api/content/${contentId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ body }),
+  });
+  if (!res.ok) throw new Error('Failed to update content item');
+  return res.json();
+}
+
+export async function approveCampaign(campaignId: string): Promise<{ status: string }> {
+  const res = await fetch(`${API_BASE}/api/campaigns/${campaignId}/approve`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to approve campaign');
+  return res.json();
+}

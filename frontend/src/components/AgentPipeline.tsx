@@ -2,7 +2,7 @@ import React from 'react';
 import { Shield, Settings, Users, PenTool, Radio, BarChart3, RefreshCw, Check } from 'lucide-react';
 
 interface AgentPipelineProps {
-  currentPhase: 'idle' | 'strategy' | 'research' | 'content' | 'executing' | 'analytics' | 'adapting';
+  currentPhase: 'idle' | 'strategy' | 'research' | 'content' | 'executing' | 'analytics' | 'adapting' | 'review' | 'completed';
 }
 
 const PHASES = [
@@ -15,6 +15,8 @@ const PHASES = [
 
 export default function AgentPipeline({ currentPhase }: AgentPipelineProps) {
   const getPhaseIndex = (phase: string) => {
+    if (phase === 'review') return 3;
+    if (phase === 'completed') return 5;
     return PHASES.findIndex((p) => p.id === phase);
   };
 

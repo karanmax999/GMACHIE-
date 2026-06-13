@@ -1,67 +1,70 @@
-"""X/Twitter API client for real posting with fallback to simulation."""
+"""X/Twitter API client using tweepy for real posting with fallback to simulation."""
 
-import httpx
+import asyncio
 from typing import Optional, Dict, Any
+import tweepy
 from loguru import logger
 
 
 class XClient:
-    """Client for X (Twitter) API v2."""
+    """Client for X (Twitter) API v2 using tweepy."""
 
-    def __init__(self, access_token: str):
-        self.access_token = access_token
-        self.base_url = "https://api.twitter.com/2"
-        self.headers = {
-            "Authorization": f"Bearer {access_token}",
-            "Content-Type": "application/json",
-        }
+    def __init__(
+        self,
+        consumer_key: str,
+        consumer_secret: str,
+        access_token: str,
+        access_token_secret: str,
+    ):
+        self.client = tweepy.Client(
+            consumer_key=consumer_key,
+            consumer_secret=consumer_secret,
+            access_token=access_token,
+            access_token_secret=access_token_secret,
+        )
 
     async def post_tweet(self, text: str, reply_to_id: Optional[str] = None) -> Optional[str]:
         """
         Post a tweet.
         Returns tweet ID if successful, None otherwise.
         """
-        payload = {"text": text}
-        if reply_to_id:
-            payload["reply"] = {"in_reply_to_tweet_id": reply_to_id}
+        try:
+            kwargs = {"text": text}
+            if reply_to_id:
+                kwargs["in_reply_to_tweet_id"] = reply_to_id
 
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.post(
-                    f"{self.base_url}/tweets",
-                    headers=self.headers,
-                    json=payload,
-                )
-                response.raise_for_status()
-                data = response.json()
-                tweet_id = data.get("data", {}).get("id")
-                logger.info(f"Tweet posted successfully: {tweet_id}")
-                return tweet_id
-            except httpx.HTTPError as e:
-                logger.error(f"Failed to post tweet: {e}")
+            # Run the synchronous tweepy call in a separate thread to avoid blocking the async loop
+            response = await asyncio.to_thread(self.client.create_tweet, **kwargs)
+            
+            if response and response.data:
+                tweet_id = response.data.get("id")
+                logger.info(f"Tweet posted successfully via tweepy: {tweet_id}")
+                return str(tweet_id)
+            else:
+                logger.error("Failed to post tweet: Empty response from Twitter API")
                 return None
-            except Exception as e:
-                logger.error(f"Unexpected error posting tweet: {e}")
-                return None
+        except Exception as e:
+            logger.error(f"Failed to post tweet: {e}")
+            return None
 
     async def get_tweet_metrics(self, tweet_id: str) -> Optional[Dict[str, Any]]:
         """
         Fetch public engagement metrics for a tweet.
-        Requires matching user context (the same token or appropriate permissions).
         """
-        # The v2 tweets endpoint can return public metrics if expansions are used.
-        # For simplicity, we'll try to get non-promoted data, but many metrics require additional permissions.
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            try:
-                response = await client.get(
-                    f"{self.base_url}/tweets/{tweet_id}",
-                    headers=self.headers,
-                    params={"tweet.fields": "public_metrics"},
-                )
-                response.raise_for_status()
-                data = response.json()
-                metrics = data.get("data", {}).get("public_metrics", {})
-                return metrics
-            except Exception as e:
-                logger.warning(f"Could not fetch tweet metrics: {e}")
-                return None
+        try:
+            # Run the synchronous tweepy call in a separate thread
+            response = await asyncio.to_thread(
+                self.client.get_tweet,
+                id=tweet_id,
+                tweet_fields=["public_metrics"],
+            )
+            if response and response.data:
+                tweet_data = response.data
+                if hasattr(tweet_data, "public_metrics") and tweet_data.public_metrics is not None:
+                    return tweet_data.public_metrics
+                elif isinstance(tweet_data, dict):
+                    return tweet_data.get("public_metrics")
+            return None
+        except Exception as e:
+            logger.warning(f"Could not fetch tweet metrics: {e}")
+            return None

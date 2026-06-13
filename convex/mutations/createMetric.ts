@@ -10,9 +10,9 @@ export default mutation({
     value: v.number(),
     recordedAt: v.string(),  // ISO date string
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const { campaignId, contentId, channel, metricType, value, recordedAt } = args;
-    ctx.db.insert("metrics", {
+    await ctx.db.insert("metrics", {
       campaignId,
       contentId,
       channel,

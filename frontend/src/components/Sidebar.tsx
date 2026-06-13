@@ -71,7 +71,7 @@ export default function Sidebar({
                     {c.name}
                   </div>
                   <div className="text-[11px] text-slate-500 truncate mt-0.5">
-                    {c.businessInfo.name} • Cycle {c.currentCycle}
+                    {(c.businessInfo?.name || 'Unknown')} • Cycle {c.currentCycle}
                   </div>
                 </div>
                 {c.status === 'running' && (

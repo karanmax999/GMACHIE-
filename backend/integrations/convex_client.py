@@ -7,6 +7,25 @@ import os
 from loguru import logger
 
 
+def _format_date(dt: Any) -> Optional[str]:
+    if dt is None:
+        return None
+    if isinstance(dt, str):
+        return dt
+    if hasattr(dt, "isoformat"):
+        return dt.isoformat()
+    return str(dt)
+
+
+def clean_args(args: Any) -> Any:
+    """Recursively remove None values from dictionary keys so they map to undefined in Convex."""
+    if isinstance(args, dict):
+        return {k: clean_args(v) for k, v in args.items() if v is not None}
+    elif isinstance(args, list):
+        return [clean_args(v) for v in args]
+    return args
+
+
 class ConvexClient:
     """HTTP client for Convex mutations and queries."""
 
@@ -23,10 +42,13 @@ class ConvexClient:
     async def call_mutation(self, name: str, args: Dict[str, Any]) -> Any:
         """Call a Convex mutation."""
         url = f"{self.base_url}/api/mutations/{name}"
-        payload = {"args": args}
+        cleaned_args = clean_args(args)
+        payload = {"args": cleaned_args}
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.post(url, json=payload, headers=self.headers)
+                if response.status_code != 200:
+                    logger.error(f"Convex mutation {name} failed status={response.status_code}: {response.text}")
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -38,13 +60,16 @@ class ConvexClient:
         url = f"{self.base_url}/api/queries/{name}"
         params = {}
         if args:
+            cleaned_args = clean_args(args)
             # For simple query parameters, use GET params.
             # For complex objects, should use POST with body, but Convex expects GET with query params for simple types.
             # We'll use GET with query params for now, assuming args are simple.
-            params = args
+            params = cleaned_args
         async with httpx.AsyncClient(timeout=30.0) as client:
             try:
                 response = await client.get(url, params=params, headers=self.headers)
+                if response.status_code != 200:
+                    logger.error(f"Convex query {name} failed status={response.status_code}: {response.text}")
                 response.raise_for_status()
                 return response.json()
             except Exception as e:
@@ -76,8 +101,8 @@ class ConvexClient:
         input_data: Any,
         output: Any,
         status: str,
-        started_at: datetime,
-        completed_at: Optional[datetime] = None,
+        started_at: Any,
+        completed_at: Optional[Any] = None,
         errors: Optional[list[str]] = None,
     ):
         """Log an agent execution run."""
@@ -88,8 +113,8 @@ class ConvexClient:
             "input": input_data,
             "output": output,
             "status": status,
-            "startedAt": started_at.isoformat(),
-            "completedAt": completed_at.isoformat() if completed_at else None,
+            "startedAt": _format_date(started_at),
+            "completedAt": _format_date(completed_at),
             "errors": errors,
         })
 
@@ -102,8 +127,8 @@ class ConvexClient:
         status: str,
         title: Optional[str] = None,
         variant: Optional[str] = None,
-        published_at: Optional[datetime] = None,
-        scheduled_at: Optional[datetime] = None,
+        published_at: Optional[Any] = None,
+        scheduled_at: Optional[Any] = None,
         metrics: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Create a content record."""
@@ -115,11 +140,18 @@ class ConvexClient:
             "body": body,
             "variant": variant,
             "status": status,
-            "publishedAt": published_at.isoformat() if published_at else None,
-            "scheduledAt": scheduled_at.isoformat() if scheduled_at else None,
+            "publishedAt": _format_date(published_at),
+            "scheduledAt": _format_date(scheduled_at),
             "metrics": metrics,
         })
         return result["contentId"]
+
+    async def update_content(self, content_id: str, updates: Dict[str, Any]):
+        """Update content fields."""
+        await self.call_mutation("updateContent", {
+            "contentId": content_id,
+            "updates": updates,
+        })
 
     async def create_metric(
         self,
@@ -127,7 +159,7 @@ class ConvexClient:
         channel: str,
         metric_type: str,
         value: int,
-        recorded_at: datetime,
+        recorded_at: Any,
         content_id: Optional[str] = None,
     ):
         """Create a metric record."""
@@ -137,7 +169,7 @@ class ConvexClient:
             "channel": channel,
             "metricType": metric_type,
             "value": value,
-            "recordedAt": recorded_at.isoformat(),
+            "recordedAt": _format_date(recorded_at),
         })
 
     # Queries

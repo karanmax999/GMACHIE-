@@ -5,10 +5,11 @@ export default query({
   args: {
     campaignId: v.id("campaigns"),
   },
-  handler: (ctx, args) => {
+  handler: async (ctx, args) => {
     const { campaignId } = args;
-    return ctx.db
-      .query("by_campaign", (q) => q.eq("campaignId", campaignId))
+    return await ctx.db
+      .query("agentRuns")
+      .withIndex("by_campaign", (q) => q.eq("campaignId", campaignId))
       .collect();
   },
 });

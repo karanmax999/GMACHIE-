@@ -47,8 +47,9 @@ This repo includes `render.yaml`, `requirements.txt`, and `.python-version`.
 
 Use these settings if configuring the existing Render service manually:
 ```bash
-Build Command: pip install -r backend/requirements.txt
-Start Command: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+Root Directory: backend
+Build Command: pip install -r requirements.txt
+Start Command: uvicorn main:app --host 0.0.0.0 --port $PORT
 Python Version: 3.13.13
 ```
 

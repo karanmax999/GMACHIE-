@@ -47,7 +47,7 @@ This repo includes `render.yaml`, `requirements.txt`, and `.python-version`.
 
 Use these settings if configuring the existing Render service manually:
 ```bash
-Build Command: pip install -r requirements.txt
+Build Command: pip install -r backend/requirements.txt
 Start Command: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
 Python Version: 3.13.13
 ```
@@ -76,6 +76,10 @@ Output Directory: frontend/.next
 Set this Vercel environment variable:
 ```bash
 NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com
+```
+The same value is also committed in `frontend/.env.production` for this deployment:
+```bash
+NEXT_PUBLIC_API_URL=https://gmachie.onrender.com
 ```
 
 ## Demo

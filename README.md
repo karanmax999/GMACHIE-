@@ -66,6 +66,13 @@ REAL_MODE=false
 ### Frontend on Vercel
 This repo includes `vercel.json`, so Vercel can deploy the `frontend` app from the monorepo root.
 
+Vercel commands:
+```bash
+Install Command: cd frontend && npm install
+Build Command: cd frontend && npm run build
+Output Directory: frontend/.next
+```
+
 Set this Vercel environment variable:
 ```bash
 NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com

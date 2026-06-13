@@ -1,0 +1,24 @@
+services:
+  - type: web
+    name: gmachie-backend
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.13
+      - key: REAL_MODE
+        value: false
+      - key: CORS_ORIGINS
+        sync: false
+      - key: CONVEX_BASE_URL
+        sync: false
+      - key: CONVEX_AUTH_TOKEN
+        sync: false
+      - key: IRONLABS_API_KEY
+        sync: false
+      - key: IRONLABS_BASE_URL
+        value: https://api.ironlabs.ai/v1
+      - key: IRONLABS_MODEL
+        value: claude-3-opus

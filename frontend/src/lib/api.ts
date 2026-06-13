@@ -1,6 +1,7 @@
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8082';
 
 export interface Campaign {
+  id?: string;
   _id: string;
   name: string;
   businessInfo: any;
@@ -8,6 +9,7 @@ export interface Campaign {
   goal: string;
   status?: string;
   currentCycle?: number;
+  currentPhase?: string;
   createdAt?: string;
   updatedAt?: string;
   // Optional derived fields

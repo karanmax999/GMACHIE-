@@ -40,6 +40,37 @@ npm install
 npm run dev
 ```
 
+## Deployment
+
+### Backend on Render
+This repo includes `render.yaml`, `requirements.txt`, and `.python-version`.
+
+Use these settings if configuring the existing Render service manually:
+```bash
+Build Command: pip install -r requirements.txt
+Start Command: cd backend && uvicorn main:app --host 0.0.0.0 --port $PORT
+Python Version: 3.13
+```
+
+Set these Render environment variables:
+```bash
+CORS_ORIGINS=https://your-vercel-app.vercel.app
+CONVEX_BASE_URL=<your-convex-http-url>
+CONVEX_AUTH_TOKEN=<your-convex-token>
+IRONLABS_API_KEY=<your-ironlabs-key>
+IRONLABS_BASE_URL=https://api.ironlabs.ai/v1
+IRONLABS_MODEL=claude-3-opus
+REAL_MODE=false
+```
+
+### Frontend on Vercel
+This repo includes `vercel.json`, so Vercel can deploy the `frontend` app from the monorepo root.
+
+Set this Vercel environment variable:
+```bash
+NEXT_PUBLIC_API_URL=https://your-render-service.onrender.com
+```
+
 ## Demo
 See `scripts/run_demo.py` for automated demo that runs the full GTM loop.
 

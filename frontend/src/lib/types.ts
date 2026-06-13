@@ -9,9 +9,9 @@ export interface Campaign {
   };
   icp?: string;
   goal: string;
-  status: 'running' | 'completed' | 'failed' | 'draft';
+  status: 'running' | 'completed' | 'failed' | 'draft' | 'needs_review';
   currentCycle: number;
-  currentPhase: 'idle' | 'strategy' | 'research' | 'content' | 'executing' | 'analytics' | 'adapting';
+  currentPhase: 'idle' | 'strategy' | 'research' | 'content' | 'review' | 'executing' | 'analytics' | 'adapting' | 'completed';
   createdAt: string;
   updatedAt: string;
   gtmPlan?: {
